@@ -771,18 +771,6 @@
             </div>
 
 
-            <!-- Security -->
-            <div class="tool-card" data-tool="pdf-protect">
-                <div class="tool-icon">🔒</div>
-                <h3 class="tool-title">PDF Protect</h3>
-                <p class="tool-desc">Add password protection</p>
-            </div>
-
-            <div class="tool-card" data-tool="pdf-unlock">
-                <div class="tool-icon">🔓</div>
-                <h3 class="tool-title">PDF Unlock</h3>
-                <p class="tool-desc">Remove password protection</p>
-            </div>
 
             <!-- Info -->
             <div class="tool-card" data-tool="pdf-metadata">
@@ -842,8 +830,6 @@
             'pdf-reorder': { icon: '↕️', title: 'PDF Reorder', accept: '.pdf', multiple: false, action: 'Reorder' },
             'pdf-remove-pages': { icon: '➖', title: 'Remove Pages', accept: '.pdf', multiple: false, action: 'Remove' },
             'pdf-watermark': { icon: '💧', title: 'PDF Watermark', accept: '.pdf', multiple: false, action: 'Add Watermark' },
-            'pdf-protect': { icon: '🔒', title: 'PDF Protect', accept: '.pdf', multiple: false, action: 'Protect' },
-            'pdf-unlock': { icon: '🔓', title: 'PDF Unlock', accept: '.pdf', multiple: false, action: 'Unlock' },
             'pdf-metadata': { icon: 'ℹ️', title: 'PDF Metadata', accept: '.pdf', multiple: false, action: 'View' }
         };
 
@@ -867,6 +853,8 @@
             modalTitleText.textContent = config.title;
             actionBtn.textContent = config.action;
             actionBtn.disabled = true;
+            // Hide action button for auto-process tools
+            actionBtn.style.display = tool === 'pdf-to-text' ? 'none' : '';
             renderModalContent(tool, config);
             modal.classList.add('active');
         }
@@ -921,17 +909,6 @@
                         </div>
                         <label class="option-label" style="margin-top:16px;">Pages to Rotate (click to select, empty = all)</label>
                         <div id="rotate-page-selector" class="reorder-grid"></div>
-                    </div>`;
-                case 'pdf-protect':
-                    return `<div class="options-section">
-                        <label class="option-label">Password</label>
-                        <input type="password" class="input-field" id="protect-password" placeholder="Enter password">
-                        <input type="password" class="input-field" id="protect-password-confirm" placeholder="Confirm password">
-                    </div>`;
-                case 'pdf-unlock':
-                    return `<div class="options-section">
-                        <label class="option-label">Password</label>
-                        <input type="password" class="input-field" id="unlock-password" placeholder="Enter password">
                     </div>`;
                 case 'pdf-watermark':
                     return `<div class="options-section">
@@ -998,6 +975,11 @@
 
             if (['pdf-reorder', 'pdf-remove-pages', 'pdf-split', 'pdf-rotate'].includes(currentTool) && uploadedFiles.length > 0) {
                 await showPageControls(uploadedFiles[0]);
+            }
+
+            // Auto-extract for PDF to Text
+            if (currentTool === 'pdf-to-text' && uploadedFiles.length > 0) {
+                await pdfToText();
             }
         }
 
@@ -1236,8 +1218,6 @@
                     case 'pdf-reorder': await reorderPdf(); break;
                     case 'pdf-remove-pages': await removePages(); break;
                     case 'pdf-watermark': await addWatermark(); break;
-                    case 'pdf-protect': await protectPdf(); break;
-                    case 'pdf-unlock': await unlockPdf(); break;
                     case 'pdf-metadata': await showMetadata(); break;
                 }
             } catch (error) {
@@ -1291,17 +1271,25 @@
 
         async function pdfToText() {
             const file = uploadedFiles[0];
-            const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
-            let text = '';
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const content = await page.getTextContent();
-                text += `--- Page ${i} ---\n${content.items.map(item => item.str).join(' ')}\n\n`;
-            }
+            const loading = document.getElementById('loading');
             const results = document.getElementById('results');
-            results.innerHTML = `<div class="text-result">${escapeHtml(text)}</div><button class="btn btn-primary download-all-btn" onclick="downloadText()">Download TXT</button>`;
-            results.classList.add('active');
-            window.extractedText = text;
+            loading.classList.add('active');
+            results.classList.remove('active');
+
+            try {
+                const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+                let text = '';
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    text += `--- Page ${i} ---\n${content.items.map(item => item.str).join(' ')}\n\n`;
+                }
+                results.innerHTML = `<div class="text-result">${escapeHtml(text)}</div><button class="btn btn-primary download-all-btn" onclick="downloadText()">Download TXT</button>`;
+                results.classList.add('active');
+                window.extractedText = text;
+            } finally {
+                loading.classList.remove('active');
+            }
         }
 
 
@@ -1442,24 +1430,6 @@
         }
 
 
-        async function protectPdf() {
-            const password = document.getElementById('protect-password')?.value;
-            const confirm = document.getElementById('protect-password-confirm')?.value;
-            if (!password || password !== confirm) { showToast('Passwords do not match!', true); return; }
-            const pdf = await PDFDocument.load(await uploadedFiles[0].arrayBuffer());
-            downloadPdf(await pdf.save({ userPassword: password, ownerPassword: password }), 'protected.pdf');
-            showToast('PDF protected!');
-        }
-
-        async function unlockPdf() {
-            const password = document.getElementById('unlock-password')?.value;
-            if (!password) { showToast('Enter password!', true); return; }
-            try {
-                const pdf = await PDFDocument.load(await uploadedFiles[0].arrayBuffer(), { password });
-                downloadPdf(await pdf.save(), 'unlocked.pdf');
-                showToast('PDF unlocked!');
-            } catch { showToast('Wrong password!', true); }
-        }
 
         async function showMetadata() {
             const pdf = await PDFDocument.load(await uploadedFiles[0].arrayBuffer(), { ignoreEncryption: true });
