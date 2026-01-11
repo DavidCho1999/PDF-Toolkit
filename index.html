@@ -116,7 +116,7 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 20px;
             width: 100%;
-            max-width: 600px;
+            max-width: 700px;
             max-height: 90vh;
             overflow-y: auto;
             box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5);
@@ -576,40 +576,53 @@
             accent-color: #3b82f6;
         }
 
-        /* Reorder list */
-        .reorder-list {
+        /* Reorder grid */
+        .reorder-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 10px;
             margin-top: 16px;
+            width: 100%;
         }
 
-        .reorder-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 16px;
+        .reorder-card {
             background: rgba(255, 255, 255, 0.05);
+            border: 2px solid transparent;
             border-radius: 10px;
-            margin-bottom: 8px;
+            padding: 8px;
             cursor: grab;
+            text-align: center;
             transition: all 0.2s;
         }
 
-        .reorder-item:hover {
-            background: rgba(255, 255, 255, 0.08);
+        .reorder-card:hover {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.1);
         }
 
-        .reorder-item.dragging {
+        .reorder-card.dragging {
             opacity: 0.5;
-            background: rgba(59, 130, 246, 0.2);
+            border-color: #06b6d4;
         }
 
-        .reorder-handle {
-            color: #6b7280;
-            font-size: 16px;
+        .reorder-card.drag-over {
+            border-color: #06b6d4;
+            background: rgba(6, 182, 212, 0.1);
         }
 
-        .reorder-page {
+        .reorder-card img {
+            width: 100%;
+            aspect-ratio: 3/4;
+            object-fit: contain;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .reorder-card .page-num {
             color: #06b6d4;
-            font-weight: 500;
+            font-weight: 600;
+            font-size: 0.85rem;
         }
 
         /* Scrollbar */
@@ -734,12 +747,6 @@
                 <p class="tool-desc">Reduce PDF file size</p>
             </div>
 
-            <div class="tool-card" data-tool="pdf-optimize">
-                <div class="tool-icon">⚡</div>
-                <h3 class="tool-title">PDF Optimizer</h3>
-                <p class="tool-desc">Optimize PDF for web</p>
-            </div>
-
             <!-- Security -->
             <div class="tool-card" data-tool="pdf-protect">
                 <div class="tool-icon">🔒</div>
@@ -796,6 +803,7 @@
         let uploadedFiles = [];
         let processedResults = [];
         let pageOrder = [];
+        let pageThumbnails = [];
 
         const modal = document.getElementById('modal');
         const modalBody = document.getElementById('modal-body');
@@ -817,7 +825,6 @@
             'pdf-remove-pages': { icon: '➖', title: 'Remove Pages', accept: '.pdf', multiple: false, action: 'Remove' },
             'pdf-watermark': { icon: '💧', title: 'PDF Watermark', accept: '.pdf', multiple: false, action: 'Add Watermark' },
             'pdf-compress': { icon: '📦', title: 'PDF Compressor', accept: '.pdf', multiple: false, action: 'Compress' },
-            'pdf-optimize': { icon: '⚡', title: 'PDF Optimizer', accept: '.pdf', multiple: false, action: 'Optimize' },
             'pdf-protect': { icon: '🔒', title: 'PDF Protect', accept: '.pdf', multiple: false, action: 'Protect' },
             'pdf-unlock': { icon: '🔓', title: 'PDF Unlock', accept: '.pdf', multiple: false, action: 'Unlock' },
             'pdf-metadata': { icon: 'ℹ️', title: 'PDF Metadata', accept: '.pdf', multiple: false, action: 'View' },
@@ -838,6 +845,7 @@
             uploadedFiles = [];
             processedResults = [];
             pageOrder = [];
+            pageThumbnails = [];
             const config = toolConfigs[tool];
             modalIcon.textContent = config.icon;
             modalTitleText.textContent = config.title;
@@ -895,7 +903,25 @@
                         </div>
                     </div>`;
                 case 'pdf-compress':
-                case 'pdf-optimize':
+                    return `<div class="options-section">
+                        <label class="option-label">Compression Mode</label>
+                        <div class="option-row">
+                            <button class="option-btn active" data-cmode="light">Light (5-25%)</button>
+                            <button class="option-btn" data-cmode="maximum">Maximum</button>
+                        </div>
+                        <div class="compress-info" style="margin-top:12px;padding:12px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);border-radius:8px;font-size:0.8rem;color:#93c5fd;">
+                            <div id="compress-mode-info">Keeps text selectable, compresses images & removes metadata</div>
+                        </div>
+                        <div id="quality-options" style="display:none;margin-top:16px;">
+                            <div class="slider-container">
+                                <div class="slider-header"><span class="option-label">Quality</span><span class="slider-value" id="compress-value">70%</span></div>
+                                <input type="range" class="slider" id="compress-slider" min="10" max="100" value="70">
+                            </div>
+                            <div style="padding:8px;background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.3);border-radius:8px;font-size:0.8rem;color:#f87171;">
+                                Warning: Text will not be selectable
+                            </div>
+                        </div>
+                    </div>`;
                 case 'pdf-grayscale':
                     return `<div class="options-section">
                         <div class="slider-container">
@@ -1020,6 +1046,13 @@
                         } else if (btn.dataset.pos) {
                             document.getElementById('page-num-input')?.style.setProperty('display', 'none');
                         }
+                        if (btn.dataset.cmode === 'light') {
+                            document.getElementById('quality-options')?.style.setProperty('display', 'none');
+                            document.getElementById('compress-mode-info').textContent = 'Keeps text selectable, compresses images & removes metadata';
+                        } else if (btn.dataset.cmode === 'maximum') {
+                            document.getElementById('quality-options')?.style.setProperty('display', 'block');
+                            document.getElementById('compress-mode-info').textContent = 'Converts to images for maximum compression (text not selectable)';
+                        }
                     });
                 });
             });
@@ -1046,6 +1079,18 @@
 
             if (currentTool === 'pdf-reorder') {
                 pageOrder = Array.from({ length: pageCount }, (_, i) => i + 1);
+                pageThumbnails = [];
+
+                // Generate thumbnails
+                for (let i = 1; i <= pageCount; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 0.3 });
+                    const canvas = document.createElement('canvas');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                    pageThumbnails.push(canvas.toDataURL('image/jpeg', 0.7));
+                }
                 renderReorderList();
             } else if (currentTool === 'pdf-remove-pages') {
                 const selector = document.getElementById('page-selector');
@@ -1056,29 +1101,39 @@
         }
 
         function renderReorderList() {
-            const list = document.getElementById('reorder-list');
-            list.innerHTML = pageOrder.map((p, i) => `
-                <div class="reorder-item" draggable="true" data-index="${i}">
-                    <span class="reorder-handle">☰</span>
-                    <span class="reorder-page">Page ${p}</span>
+            const grid = document.getElementById('reorder-list');
+            grid.className = 'reorder-grid';
+            grid.innerHTML = pageOrder.map((p, i) => `
+                <div class="reorder-card" draggable="true" data-index="${i}">
+                    <img src="${pageThumbnails[p - 1]}" alt="Page ${p}">
+                    <div class="page-num">Page ${p}</div>
                 </div>
             `).join('');
             setupDragDrop();
         }
 
         function setupDragDrop() {
-            const items = document.querySelectorAll('.reorder-item');
+            const cards = document.querySelectorAll('.reorder-card');
             let dragIndex = null;
-            items.forEach(item => {
-                item.addEventListener('dragstart', (e) => {
-                    dragIndex = parseInt(item.dataset.index);
-                    item.classList.add('dragging');
+            cards.forEach(card => {
+                card.addEventListener('dragstart', (e) => {
+                    dragIndex = parseInt(card.dataset.index);
+                    card.classList.add('dragging');
                 });
-                item.addEventListener('dragend', () => item.classList.remove('dragging'));
-                item.addEventListener('dragover', (e) => e.preventDefault());
-                item.addEventListener('drop', (e) => {
+                card.addEventListener('dragend', () => {
+                    card.classList.remove('dragging');
+                    cards.forEach(c => c.classList.remove('drag-over'));
+                });
+                card.addEventListener('dragover', (e) => {
                     e.preventDefault();
-                    const dropIndex = parseInt(item.dataset.index);
+                    cards.forEach(c => c.classList.remove('drag-over'));
+                    card.classList.add('drag-over');
+                });
+                card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+                card.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    card.classList.remove('drag-over');
+                    const dropIndex = parseInt(card.dataset.index);
                     if (dragIndex !== dropIndex) {
                         const [moved] = pageOrder.splice(dragIndex, 1);
                         pageOrder.splice(dropIndex, 0, moved);
@@ -1108,8 +1163,7 @@
                     case 'pdf-add-pages': await addPages(); break;
                     case 'pdf-remove-pages': await removePages(); break;
                     case 'pdf-watermark': await addWatermark(); break;
-                    case 'pdf-compress':
-                    case 'pdf-optimize': await compressPdf(); break;
+                    case 'pdf-compress': await compressPdf(); break;
                     case 'pdf-protect': await protectPdf(); break;
                     case 'pdf-unlock': await unlockPdf(); break;
                     case 'pdf-metadata': await showMetadata(); break;
@@ -1320,25 +1374,56 @@
 
         async function compressPdf() {
             const file = uploadedFiles[0];
-            const quality = parseInt(document.getElementById('compress-slider')?.value || 70) / 100;
-            const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
-            const newPdf = await PDFDocument.create();
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const viewport = page.getViewport({ scale: quality + 0.5 });
-                const canvas = document.createElement('canvas');
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-                const imgBytes = await fetch(canvas.toDataURL('image/jpeg', quality)).then(r => r.arrayBuffer());
-                const img = await newPdf.embedJpg(imgBytes);
-                const newPage = newPdf.addPage([img.width, img.height]);
-                newPage.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+            const mode = document.querySelector('.option-btn[data-cmode].active')?.dataset.cmode || 'light';
+            const arrayBuffer = await file.arrayBuffer();
+
+            if (mode === 'light') {
+                // Light mode: copy pages to new PDF, removes orphaned objects
+                const srcPdf = await PDFDocument.load(arrayBuffer);
+                const newPdf = await PDFDocument.create();
+
+                // Copy all pages to new document (removes unused objects)
+                const pages = await newPdf.copyPages(srcPdf, srcPdf.getPageIndices());
+                pages.forEach(page => newPdf.addPage(page));
+
+                // Clear metadata
+                newPdf.setTitle('');
+                newPdf.setAuthor('');
+                newPdf.setSubject('');
+                newPdf.setKeywords([]);
+                newPdf.setProducer('');
+                newPdf.setCreator('');
+
+                const pdfBytes = await newPdf.save({ useObjectStreams: true });
+                const savings = ((1 - pdfBytes.length / file.size) * 100).toFixed(1);
+                downloadPdf(pdfBytes, 'compressed.pdf');
+                if (savings > 0) {
+                    showToast(`Compressed! Saved ${savings}%`);
+                } else {
+                    showToast(`File already optimized (size similar)`);
+                }
+            } else {
+                // Maximum mode: rasterize to images
+                const quality = parseInt(document.getElementById('compress-slider')?.value || 70) / 100;
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const newPdf = await PDFDocument.create();
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: quality + 0.5 });
+                    const canvas = document.createElement('canvas');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                    const imgBytes = await fetch(canvas.toDataURL('image/jpeg', quality)).then(r => r.arrayBuffer());
+                    const img = await newPdf.embedJpg(imgBytes);
+                    const newPage = newPdf.addPage([img.width, img.height]);
+                    newPage.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+                }
+                const pdfBytes = await newPdf.save();
+                const savings = ((1 - pdfBytes.length / file.size) * 100).toFixed(1);
+                downloadPdf(pdfBytes, 'compressed.pdf');
+                showToast(`Compressed! Saved ${savings}%`);
             }
-            const pdfBytes = await newPdf.save();
-            const savings = ((1 - pdfBytes.length / file.size) * 100).toFixed(1);
-            downloadPdf(pdfBytes, 'compressed.pdf');
-            showToast(`Compressed! Saved ${savings}%`);
         }
 
         async function protectPdf() {
